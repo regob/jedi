@@ -54,6 +54,34 @@ def test_load_save_project(tmpdir):
     assert loaded.added_sys_path == ['/foo']
 
 
+def test_no_jedignore(tmpdir):
+    project = Project(tmpdir.strpath)
+    assert project.ignored_paths == []
+
+
+def test_jedignore_loaded(tmpdir):
+    dot_jedi_folder_path = os.path.join(tmpdir.strpath, ".jedi")
+    os.mkdir(dot_jedi_folder_path)
+    jedignore_path = os.path.join(dot_jedi_folder_path, ".jedignore")
+
+    contents = [
+        "# thisisacomment",
+        "/tmp/randompath/",
+        "rel_path_to_dir/",
+        "rel_path_to/file.py",
+        "long/rel/path/to/dir",
+    ]
+
+    with open(jedignore_path, "w") as f:
+        for line in contents:
+            f.write(line + "\n")
+
+    good_results = ["/tmp/randompath"] + \
+        [os.path.normpath(os.path.join(tmpdir.strpath, pth)) for pth in contents[2:]]
+
+    project = Project(tmpdir.strpath)
+    assert set(good_results) == set(project.ignored_paths)
+
 @pytest.mark.parametrize(
     'string, full_names, kwargs', [
         ('test_load_save_project', ['test_api.test_project.test_load_save_project'], {}),

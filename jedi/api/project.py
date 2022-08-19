@@ -7,6 +7,7 @@ flexibility to define sys paths and Python interpreters for a project,
 Projects can be saved to disk and loaded again, to allow project definitions to
 be used across repositories.
 """
+import os
 import json
 from pathlib import Path
 from itertools import chain
@@ -99,6 +100,7 @@ class Project:
         data = dict(self.__dict__)
         data.pop('_environment', None)
         data.pop('_django', None)  # TODO make django setting public?
+        data.pop('_ignored_paths', None)
         data = {k.lstrip('_'): v for k, v in data.items()}
         data['path'] = str(data['path'])
 
@@ -151,6 +153,12 @@ class Project:
         self.added_sys_path = list(map(str, added_sys_path))
         """The sys path that is going to be added at the end of the """
 
+        jedignore_path = os.path.join(self._path, _CONFIG_FOLDER, ".jedignore")
+        if os.path.exists(jedignore_path):
+            self._ignored_paths = load_jedignore(jedignore_path, self._path)
+        else:
+            self._ignored_paths = []
+
     @property
     def path(self):
         """
@@ -180,6 +188,13 @@ class Project:
         Wheter the project loads unsafe extensions.
         """
         return self._load_unsafe_extensions
+
+    @property
+    def ignored_paths(self):
+        """
+        Ignored paths when searching in the project.
+        """
+        return self._ignored_paths
 
     @inference_state_as_method_param_cache()
     def _get_base_sys_path(self, inference_state):
@@ -284,7 +299,7 @@ class Project:
 
     @_try_to_skip_duplicates
     def _search_func(self, string, complete=False, all_scopes=False):
-        # Using a Script is they easiest way to get an empty module context.
+        # Using a Script is the easiest way to get an empty module context.
         from jedi import Script
         s = Script('', project=self)
         inference_state = s._inference_state
@@ -295,7 +310,8 @@ class Project:
         name = wanted_names[0]
         stub_folder_name = name + '-stubs'
 
-        ios = recurse_find_python_folders_and_files(FolderIO(str(self._path)))
+        ios = recurse_find_python_folders_and_files(FolderIO(str(self._path)),
+                                                    self.ignored_paths)
         file_ios = []
 
         # 1. Search for modules in the current project
@@ -448,3 +464,18 @@ def _remove_imports(names):
         n for n in names
         if n.tree_name is None or n.api_type not in ('module', 'namespace')
     ]
+
+def load_jedignore(jedignore_path, project_root):
+    with open(jedignore_path, "r") as f:
+        lines = f.readlines()
+    stripped_lines = map(lambda x: x.strip(), lines)
+    filtered_lines = filter(lambda x: x and not x.startswith("#"), stripped_lines)
+    
+    def line_to_path(line):
+        if not line.startswith("/"):
+            line = os.path.join(project_root, line)
+        # remove trailing '/', and any double slashes
+        return os.path.normpath(line)
+
+    return list(map(line_to_path, filtered_lines))
+    

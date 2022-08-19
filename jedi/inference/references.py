@@ -10,7 +10,7 @@ from jedi.inference.imports import load_module_from_path
 from jedi.inference.filters import ParserTreeFilter
 from jedi.inference.gradual.conversion import convert_names
 
-_IGNORE_FOLDERS = ('.tox', '.venv', '.mypy_cache', 'venv', '__pycache__')
+_IGNORE_FOLDERS = ('.tox', '.venv', '.mypy_cache', 'venv', '__pycache__', '.git')
 
 _OPENED_FILE_LIMIT = 2000
 """
@@ -252,6 +252,10 @@ def _find_python_files_in_sys_path(inference_state, module_contexts):
 
 def _find_project_modules(inference_state, module_contexts):
     except_ = [m.py__file__() for m in module_contexts]
+    try:
+        except_.extend(inference_state.project.ignored_paths)
+    except AttributeError:
+        pass
     yield from recurse_find_python_files(FolderIO(inference_state.project.path), except_)
 
 
